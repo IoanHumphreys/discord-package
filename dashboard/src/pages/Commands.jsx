@@ -1,4 +1,4 @@
-import { Hash, Shield, Settings, Star, Music, Search, Filter, RefreshCw } from 'lucide-react'
+import { Hash, Shield, Settings, Star, Music, Search, Filter, RefreshCw, Zap, Users, MessageSquare } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 const Commands = () => {
@@ -9,7 +9,31 @@ const Commands = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Default categories with fallback commands
+  // Category icons mapping
+  const categoryIcons = {
+    'General': Hash,
+    'Moderation': Shield,
+    'Admin': Settings,
+    'Fun': Star,
+    'Music': Music,
+    'Utility': Zap,
+    'Info': MessageSquare,
+    'Social': Users
+  }
+
+  // Category colors mapping
+  const categoryColors = {
+    'General': 'blue',
+    'Moderation': 'red',
+    'Admin': 'gray',
+    'Fun': 'orange',
+    'Music': 'green',
+    'Utility': 'purple',
+    'Info': 'cyan',
+    'Social': 'pink'
+  }
+
+  // Default fallback commands in case API fails
   const defaultCategories = [
     {
       name: 'General',
@@ -34,39 +58,6 @@ const Commands = () => {
         { name: 'clear', description: 'Clear messages', usage: '/clear <amount>' }
       ],
       color: 'red'
-    },
-    {
-      name: 'Admin',
-      icon: Settings,
-      commands: [
-        { name: 'config', description: 'Configure bot settings', usage: '/config <setting> <value>' },
-        { name: 'logs', description: 'View server logs', usage: '/logs [type]' },
-        { name: 'reload', description: 'Reload bot commands', usage: '/reload [command]' },
-        { name: 'backup', description: 'Create server backup', usage: '/backup' }
-      ],
-      color: 'gray'
-    },
-    {
-      name: 'Fun',
-      icon: Star,
-      commands: [
-        { name: 'meme', description: 'Generate a random meme', usage: '/meme [category]' },
-        { name: '8ball', description: 'Ask the magic 8-ball', usage: '/8ball <question>' },
-        { name: 'joke', description: 'Tell a random joke', usage: '/joke [type]' },
-        { name: 'quote', description: 'Share an inspirational quote', usage: '/quote' }
-      ],
-      color: 'orange'
-    },
-    {
-      name: 'Music',
-      icon: Music,
-      commands: [
-        { name: 'play', description: 'Play music from YouTube', usage: '/play <song/url>' },
-        { name: 'pause', description: 'Pause current song', usage: '/pause' },
-        { name: 'skip', description: 'Skip to next song', usage: '/skip' },
-        { name: 'queue', description: 'Show music queue', usage: '/queue' }
-      ],
-      color: 'green'
     }
   ]
 
@@ -83,6 +74,7 @@ const Commands = () => {
       
       if (response.ok) {
         const data = await response.json()
+        console.log('API Response:', data) // Debug log
         
         // Process API data into our category structure
         const processedCategories = processApiCommands(data)
@@ -102,16 +94,15 @@ const Commands = () => {
   }
 
   const processApiCommands = (apiCommands) => {
+    console.log('Processing commands:', apiCommands) // Debug log
+    
+    if (!apiCommands || !Array.isArray(apiCommands)) {
+      console.warn('Invalid API response format')
+      return defaultCategories
+    }
+
     // Create a map to group commands by category
     const categoryMap = new Map()
-    
-    // Initialize with default categories
-    defaultCategories.forEach(cat => {
-      categoryMap.set(cat.name, {
-        ...cat,
-        commands: []
-      })
-    })
     
     // Process API commands
     apiCommands.forEach(cmd => {
@@ -121,9 +112,9 @@ const Commands = () => {
         // Create new category if not exists
         categoryMap.set(category, {
           name: category,
-          icon: Hash, // Default icon
+          icon: categoryIcons[category] || Hash,
           commands: [],
-          color: 'blue' // Default color
+          color: categoryColors[category] || 'blue'
         })
       }
       
@@ -134,8 +125,17 @@ const Commands = () => {
       })
     })
     
-    // Convert map back to array and filter empty categories
-    return Array.from(categoryMap.values()).filter(cat => cat.commands.length > 0)
+    // If no commands were processed, return defaults
+    if (categoryMap.size === 0) {
+      console.warn('No commands processed from API, using defaults')
+      return defaultCategories
+    }
+    
+    // Convert map back to array
+    const processedCategories = Array.from(categoryMap.values())
+    console.log('Processed categories:', processedCategories) // Debug log
+    
+    return processedCategories
   }
 
   // Use either fetched commands or default categories
@@ -169,7 +169,10 @@ const Commands = () => {
       red: 'border-l-red-500',
       gray: 'border-l-gray-500', 
       orange: 'border-l-orange-500',
-      green: 'border-l-green-500'
+      green: 'border-l-green-500',
+      purple: 'border-l-purple-500',
+      cyan: 'border-l-cyan-500',
+      pink: 'border-l-pink-500'
     }
     return colors[color] || colors.blue
   }
@@ -351,7 +354,7 @@ const Commands = () => {
         </div>
         <div className="bg-surface border border-border rounded-lg p-3 text-center">
           <div className="text-lg font-bold text-primary">
-            {error ? 'Offline' : '24/7'}
+            {error ? 'Offline' : 'Online'}
           </div>
           <div className="text-xs text-text-muted">Status</div>
         </div>

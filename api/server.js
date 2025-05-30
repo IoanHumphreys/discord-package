@@ -1,6 +1,9 @@
+// api/server.js - Updated server with authentication
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const { supabase } = require('../config/database');
+const { router: authRouter, requireAuth } = require('./auth');
 const logger = require('../utils/logger');
 
 const app = express();
@@ -12,8 +15,18 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
+app.use(cookieParser());
 
-// Bot stats endpoint
+// Auth routes
+app.use('/api/auth', authRouter);
+
+// Protected routes - require authentication
+app.use('/api/stats', requireAuth);
+app.use('/api/guilds', requireAuth);
+app.use('/api/commands', requireAuth);
+app.use('/api/activity', requireAuth);
+
+// Bot stats endpoint (protected)
 app.get('/api/stats', async (req, res) => {
     try {
         const client = req.app.get('discordClient');
@@ -39,25 +52,34 @@ app.get('/api/stats', async (req, res) => {
         if (hours > 0) uptimeString += `${hours}h `;
         uptimeString += `${minutes}m`;
 
+        // Filter guilds that the user has access to
+        const userGuilds = req.userGuilds || [];
+        const userGuildIds = userGuilds.map(g => g.id);
+        const accessibleGuilds = client.guilds.cache.filter(guild => 
+            userGuildIds.includes(guild.id)
+        );
+
         const stats = {
-            guilds: client.guilds.cache.size,
-            users: client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0),
+            guilds: accessibleGuilds.size,
+            users: accessibleGuilds.reduce((acc, guild) => acc + guild.memberCount, 0),
             commands: client.commands.size,
             uptime: uptimeString.trim(),
             ping: client.ws.ping,
             memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-            lastRestart: new Date(Date.now() - uptimeMs).toISOString()
+            lastRestart: new Date(Date.now() - uptimeMs).toISOString(),
+            totalGuilds: client.guilds.cache.size,
+            totalUsers: client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0)
         };
 
         res.json(stats);
-        logger.info('Stats API called successfully');
+        logger.info(`Stats API called by ${req.user.username}`);
     } catch (error) {
         logger.error('Error fetching bot stats:', error);
         res.status(500).json({ error: 'Failed to fetch bot stats' });
     }
 });
 
-// Guild list endpoint
+// Guild list endpoint (protected)
 app.get('/api/guilds', async (req, res) => {
     try {
         const client = req.app.get('discordClient');
@@ -66,22 +88,36 @@ app.get('/api/guilds', async (req, res) => {
             return res.status(503).json({ error: 'Bot is not ready' });
         }
 
-        const guilds = client.guilds.cache.map(guild => ({
-            id: guild.id,
-            name: guild.name,
-            memberCount: guild.memberCount,
-            icon: guild.iconURL(),
-            owner: guild.ownerId
-        }));
+        // Get user's guilds from their Discord data
+        const userGuilds = req.userGuilds || [];
+        const userGuildIds = userGuilds.map(g => g.id);
 
-        res.json(guilds);
+        // Filter bot guilds to only show ones the user has access to
+        const accessibleGuilds = client.guilds.cache
+            .filter(guild => userGuildIds.includes(guild.id))
+            .map(guild => {
+                const userGuild = userGuilds.find(ug => ug.id === guild.id);
+                return {
+                    id: guild.id,
+                    name: guild.name,
+                    memberCount: guild.memberCount,
+                    icon: guild.iconURL(),
+                    owner: guild.ownerId,
+                    userPermissions: userGuild ? userGuild.permissions : '0',
+                    userIsOwner: userGuild ? (userGuild.permissions & 0x8) === 0x8 : false,
+                    userCanManage: userGuild ? (userGuild.permissions & 0x20) === 0x20 : false
+                };
+            });
+
+        res.json(accessibleGuilds);
+        logger.info(`Guilds API called by ${req.user.username}`);
     } catch (error) {
         logger.error('Error fetching guilds:', error);
         res.status(500).json({ error: 'Failed to fetch guilds' });
     }
 });
 
-// Commands endpoint
+// Commands endpoint (protected)
 app.get('/api/commands', async (req, res) => {
     try {
         const client = req.app.get('discordClient');
@@ -98,20 +134,21 @@ app.get('/api/commands', async (req, res) => {
         }));
 
         res.json(commands);
+        logger.info(`Commands API called by ${req.user.username}`);
     } catch (error) {
         logger.error('Error fetching commands:', error);
         res.status(500).json({ error: 'Failed to fetch commands' });
     }
 });
 
-// Activity logs endpoint (using Supabase)
+// Activity logs endpoint (protected)
 app.get('/api/activity', async (req, res) => {
     try {
         const { data: activities, error } = await supabase
             .from('activity_logs')
             .select('*')
             .order('created_at', { ascending: false })
-            .limit(10);
+            .limit(20);
 
         if (error) {
             logger.error('Supabase error:', error);
@@ -126,7 +163,7 @@ app.get('/api/activity', async (req, res) => {
                 {
                     id: 2,
                     type: 'command',
-                    message: 'Command "/ban" executed by Admin',
+                    message: `Command "/help" executed by ${req.user.username}`,
                     created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString()
                 },
                 {
@@ -139,13 +176,14 @@ app.get('/api/activity', async (req, res) => {
         }
 
         res.json(activities || []);
+        logger.info(`Activity API called by ${req.user.username}`);
     } catch (error) {
         logger.error('Error fetching activity:', error);
         res.status(500).json({ error: 'Failed to fetch activity logs' });
     }
 });
 
-// Health check endpoint
+// Health check endpoint (public)
 app.get('/api/health', (req, res) => {
     const client = req.app.get('discordClient');
     
@@ -163,6 +201,7 @@ function startApiServer(discordClient) {
     app.listen(PORT, () => {
         logger.success(`API server running on port ${PORT}`);
         logger.info(`Dashboard API available at http://localhost:${PORT}/api`);
+        logger.info(`Discord OAuth configured for: ${process.env.DISCORD_REDIRECT_URI || 'http://localhost:3001/api/auth/callback'}`);
     });
 }
 

@@ -1,4 +1,7 @@
+// dashboard/src/App.jsx
 import { useState, useEffect } from 'react'
+import { AuthProvider } from './contexts/AuthContext'
+import ProtectedRoute from './components/ProtectedRoute'
 import Navbar from './components/Navbar'
 import Dashboard from './pages/Dashboard'
 import Stats from './pages/Stats'
@@ -6,7 +9,7 @@ import Commands from './pages/Commands'
 import Settings from './pages/Settings'
 import './styles/App.css'
 
-function App() {
+function AppContent() {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [botStats, setBotStats] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -22,9 +25,15 @@ function App() {
   const fetchBotStats = async () => {
     try {
       setError(null)
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/stats`)
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/stats`, {
+        credentials: 'include' // Include cookies for authentication
+      })
       
       if (!response.ok) {
+        if (response.status === 401) {
+          // User is not authenticated, handled by ProtectedRoute
+          return
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
       
@@ -87,6 +96,16 @@ function App() {
         {renderPage()}
       </main>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <ProtectedRoute>
+        <AppContent />
+      </ProtectedRoute>
+    </AuthProvider>
   )
 }
 

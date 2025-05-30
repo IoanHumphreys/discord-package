@@ -66,3 +66,59 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.auth-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: auto;
+  z-index: 9999;
+}
+
+/* Prevent body scroll when auth page is active */
+body.auth-active {
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Ensure proper centering on all screen sizes */
+.auth-content {
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+  .auth-content {
+    padding: 1rem 0.5rem;
+  }
+  
+  .auth-card {
+    width: 100%;
+    max-width: 90vw;
+  }
+}
+
+/* Desktop centering */
+@media (min-width: 641px) {
+  .auth-content {
+    padding: 2rem;
+  }
+  
+  .auth-card {
+    width: 100%;
+    max-width: 28rem; /* max-w-md equivalent */
+  }
+}
+
+/* High resolution displays */
+@media (min-width: 1920px) {
+  .auth-card {
+    max-width: 32rem; /* Slightly larger on very large screens */
+  }
+}

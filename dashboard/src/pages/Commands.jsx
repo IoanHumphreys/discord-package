@@ -63,7 +63,7 @@ const Commands = () => {
 
   useEffect(() => {
     fetchCommands()
-  }, [])
+  },)
 
   const fetchCommands = async () => {
     try {
